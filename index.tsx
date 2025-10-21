@@ -18,6 +18,9 @@ const apiFetch = async (url, options = {}) => {
         return response.json();
     } catch (error) {
         console.error('API Fetch Error:', error);
+        if (error instanceof TypeError && error.message === 'Failed to fetch') {
+            throw new Error('Connection failed. Please ensure the backend server is running.');
+        }
         throw error;
     }
 };
@@ -361,7 +364,8 @@ const App = () => {
 };
 
 // --- Styles ---
-const styles = {
+// FIX: Explicitly type the styles object to satisfy TypeScript's CSSProperties type checking.
+const styles: { [key: string]: React.CSSProperties } = {
     container: { fontFamily: 'sans-serif', maxWidth: '1200px', margin: '0 auto', padding: '20px' },
     header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #eee', paddingBottom: '10px', marginBottom: '20px' },
     logoutButton: { marginLeft: '15px', background: '#f44336', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '4px', cursor: 'pointer' },
@@ -371,7 +375,7 @@ const styles = {
     input: { padding: '10px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '1rem' },
     button: { padding: '10px 15px', border: 'none', background: '#007BFF', color: 'white', borderRadius: '4px', cursor: 'pointer', fontSize: '1rem' },
     buttonDanger: { padding: '5px 10px', border: 'none', background: '#dc3545', color: 'white', borderRadius: '4px', cursor: 'pointer' },
-    error: { color: 'red', marginTop: '10px' },
+    error: { color: 'red', marginTop: '10px', background: '#ffebee', border: '1px solid #e57373', padding: '10px', borderRadius: '4px' },
     table: { width: '100%', borderCollapse: 'collapse', marginTop: '20px' },
     th: { background: '#f2f2f2', padding: '12px', border: '1px solid #ddd', textAlign: 'left' },
     td: { padding: '12px', border: '1px solid #ddd' },
