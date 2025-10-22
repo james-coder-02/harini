@@ -1,78 +1,239 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
+import { GoogleGenAI } from "@google/genai";
 
-const API_BASE_URL = 'http://localhost:3001/api';
+// FIX: Add type definitions for data models to ensure type safety throughout the application.
+interface User {
+  id: number;
+  username: string;
+  password?: string; // Optional because we remove it for client-side state
+  role: 'Admin' | 'Student' | 'Faculty';
+  name: string;
+}
+
+// FIX: Renamed Event to AppEvent to avoid conflict with the built-in DOM Event type.
+interface AppEvent {
+  id: number;
+  name: string;
+  date: string;
+  time: string;
+  venue: string;
+  cost: number;
+  description: string;
+}
+
+// FIX: Renamed Registration to AppRegistration for consistency.
+interface AppRegistration {
+  id: number;
+  studentId: number;
+  eventId: number;
+  status: 'Verified' | 'Pending';
+}
+
+// --- MOCK DATABASE (MOVED FROM SERVER) ---
+const mockUsers: User[] = [
+  { id: 1, username: 'admin', password: 'password', role: 'Admin', name: 'Admin User' },
+  { id: 101, username: 'student1', password: 'password', role: 'Student', name: 'Alice Smith' },
+  { id: 102, username: 'student2', password: 'password', role: 'Student', name: 'Bob Johnson' },
+  { id: 201, username: 'faculty1', password: 'password', role: 'Faculty', name: 'Dr. Emily Carter' },
+];
+
+// FIX: Updated to use AppEvent type.
+let mockEvents: AppEvent[] = [
+  { id: 1, name: 'Tech Fest 2024', date: '2024-10-15', time: '09:00', venue: 'Main Auditorium', cost: 800, description: 'A festival showcasing the latest in technology and innovation.' },
+  { id: 2, name: 'Arts & Culture Expo', date: '2024-11-05', time: '11:00', venue: 'Exhibition Hall', cost: 400, description: 'Celebrate creativity with art displays, music, and dance performances.' },
+  { id: 3, name: 'Entrepreneurship Workshop', date: '2024-11-20', time: '14:00', venue: 'Seminar Hall B', cost: 2000, description: 'Learn the fundamentals of starting your own business from industry experts.' },
+];
+
+// FIX: Updated to use AppRegistration type.
+let mockRegistrations: AppRegistration[] = [
+  { id: 1, studentId: 101, eventId: 1, status: 'Verified' },
+  { id: 2, studentId: 102, eventId: 1, status: 'Pending' },
+  { id: 3, studentId: 101, eventId: 3, status: 'Pending' },
+];
+
 
 // --- Helper Functions ---
-const apiFetch = async (url, options = {}) => {
-    try {
-        const response = await fetch(`${API_BASE_URL}${url}`, {
-            headers: { 'Content-Type': 'application/json' },
-            ...options,
-        });
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ message: response.statusText }));
-            throw new Error(errorData.message || 'An error occurred');
-        }
-        if (response.status === 204) return null; // Handle No Content response
-        return response.json();
-    } catch (error) {
-        console.error('API Fetch Error:', error);
-        if (error instanceof TypeError && error.message === 'Failed to fetch') {
-            throw new Error('Connection failed. Please ensure the backend server is running.');
-        }
-        throw error;
-    }
+// API calls are now simulated to remove the dependency on a separate backend server.
+
+// FIX: Add type for options object to fix errors on lines 32 and 33.
+interface ApiFetchOptions {
+  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  body?: string;
+}
+
+// FIX: Make apiFetch generic to allow typed return values, preventing errors from unknown types.
+// FIX: Changed to a standard function declaration to avoid potential parsing issues with generics.
+function apiFetch<T>(url: string, options: ApiFetchOptions = {}): Promise<T> {
+    return new Promise((resolve, reject) => {
+        setTimeout(() => { // Simulate network delay
+            try {
+                const method = options.method || 'GET';
+                const body = options.body ? JSON.parse(options.body) : {};
+
+                console.log(`Simulating ${method} ${url}`);
+
+                // Login
+                if (url === '/login' && method === 'POST') {
+                    const { username, password, role } = body;
+                    const user = mockUsers.find(u => u.username === username && u.password === password && u.role === role);
+                    if (user) {
+                        const userWithoutPassword = Object.assign({}, user);
+                        delete userWithoutPassword.password;
+                        return resolve(userWithoutPassword as unknown as T);
+                    }
+                    return reject(new Error('Invalid username, password, or role.'));
+                }
+
+                // Get all events
+                if (url === '/events' && method === 'GET') {
+                    return resolve([...mockEvents] as unknown as T);
+                }
+
+                // Add a new event
+                if (url === '/events' && method === 'POST') {
+                    const newEvent: AppEvent = Object.assign({}, body, { id: Date.now() });
+                    mockEvents.push(newEvent);
+                    return resolve(newEvent as unknown as T);
+                }
+
+                // Delete an event
+                if (url.startsWith('/events/') && method === 'DELETE') {
+                    const eventId = parseInt(url.split('/')[2], 10);
+                    mockEvents = mockEvents.filter(event => event.id !== eventId);
+                    mockRegistrations = mockRegistrations.filter(reg => reg.eventId !== eventId);
+                    return resolve(null as unknown as T); // Corresponds to 204 No Content
+                }
+
+                // Get all registrations
+                if (url === '/registrations' && method === 'GET') {
+                    return resolve([...mockRegistrations] as unknown as T);
+                }
+                
+                // Get all student users
+                if (url === '/users/students' && method === 'GET') {
+                     const students = mockUsers.filter(u => u.role === 'Student').map(s => {
+                        const student = Object.assign({}, s);
+                        delete student.password;
+                        return student;
+                    });
+                    return resolve(students as unknown as T);
+                }
+
+                // Create a new registration
+                if (url === '/registrations' && method === 'POST') {
+                    const { studentId, eventId } = body;
+                    const newRegistration: AppRegistration = {
+                        id: Date.now(),
+                        studentId,
+                        eventId,
+                        status: 'Pending'
+                    };
+                    mockRegistrations.push(newRegistration);
+                    return resolve(newRegistration as unknown as T);
+                }
+
+                // Verify a registration
+                if (url.match(/\/registrations\/\d+\/verify/) && method === 'PATCH') {
+                    const regId = parseInt(url.split('/')[2], 10);
+                    const registration = mockRegistrations.find(reg => reg.id === regId);
+                    if (registration) {
+                        registration.status = 'Verified';
+                        return resolve(registration as unknown as T);
+                    }
+                    return reject(new Error('Registration not found.'));
+                }
+
+                return reject(new Error(`Unknown API endpoint: ${method} ${url}`));
+            } catch (e) {
+                console.error('API Simulation Error:', e);
+                return reject(e);
+            }
+        }, 300 + Math.random() * 400); // Random delay to mimic network
+    });
 };
 
 
 // --- Components ---
 
-const LoginPage = ({ onLogin }) => {
+const LoginPage = ({ onLogin }: { onLogin: (user: User) => void }) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
-    const [role, setRole] = useState('Student');
+    const [role, setRole] = useState<'Student' | 'Faculty' | 'Admin'>('Student');
     const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
+        setIsLoading(true);
         try {
-            const user = await apiFetch('/login', {
+            const user = await apiFetch<User>('/login', {
                 method: 'POST',
                 body: JSON.stringify({ username, password, role }),
             });
             onLogin(user);
-        } catch (err) {
+        } catch (err: any) {
             setError(err.message);
+        } finally {
+            setIsLoading(false);
         }
     };
 
     return (
-        <div style={styles.loginContainer}>
-            <h2>Login</h2>
-            <form onSubmit={handleSubmit} style={styles.form}>
-                <input type="text" placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} required style={styles.input} />
-                <input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required style={styles.input} />
-                <select value={role} onChange={e => setRole(e.target.value)} style={styles.input}>
-                    <option value="Student">Student</option>
-                    <option value="Faculty">Faculty</option>
-                    <option value="Admin">Admin</option>
-                </select>
-                <button type="submit" style={styles.button}>Login</button>
+        <div className="login-container">
+            <h2>College Event Management System</h2>
+            <form onSubmit={handleSubmit}>
+                <div className="form-group">
+                    <label htmlFor="username">Username</label>
+                    <input type="text" id="username" placeholder="Enter your username" value={username} onChange={e => setUsername(e.target.value)} required />
+                </div>
+                <div className="form-group">
+                    <label htmlFor="password">Password</label>
+                    <input type="password" id="password" placeholder="Enter your password" value={password} onChange={e => setPassword(e.target.value)} required />
+                </div>
+                 <div className="form-group">
+                    <label htmlFor="role">Role</label>
+                    <select id="role" value={role} onChange={e => setRole(e.target.value as 'Student' | 'Faculty' | 'Admin')}>
+                        <option value="Student">Student</option>
+                        <option value="Faculty">Faculty</option>
+                        <option value="Admin">Admin</option>
+                    </select>
+                </div>
+                <button type="submit" className="btn btn-primary" disabled={isLoading}>
+                    {isLoading ? 'Logging in...' : 'Login'}
+                </button>
             </form>
-            {error && <p style={styles.error}>{error}</p>}
+            {error && <p className="alert alert-danger">{error}</p>}
         </div>
     );
 };
 
+// FIX: Set a default value for children to make it an optional prop and type props.
+// FIX: Updated to use AppEvent type.
+const EventCard = ({ event, children = null }: { event: AppEvent, children?: React.ReactNode }) => (
+     <div className="card">
+        <h4>{event.name}</h4>
+        <div className="card-details">
+            <p><strong>Date:</strong> {event.date} at {event.time}</p>
+            <p><strong>Venue:</strong> {event.venue}</p>
+            <p><strong>Cost:</strong> ₹{event.cost}</p>
+            <p>{event.description}</p>
+        </div>
+        {children && <div className="card-actions">{children}</div>}
+    </div>
+);
+
+
 const FacultyDashboard = () => {
-    const [events, setEvents] = useState([]);
+    // FIX: Type the events state and use AppEvent.
+    const [events, setEvents] = useState<AppEvent[]>([]);
 
     useEffect(() => {
         const fetchEvents = async () => {
             try {
-                const data = await apiFetch('/events');
+                // FIX: Specify the expected return type from apiFetch to fix error on line 193.
+                const data = await apiFetch<AppEvent[]>('/events');
                 setEvents(data);
             } catch (error) {
                 console.error("Failed to fetch events:", error);
@@ -84,33 +245,29 @@ const FacultyDashboard = () => {
     return (
         <div>
             <h3>Upcoming Events</h3>
-            <div style={styles.cardContainer}>
-                 {events.map(event => (
-                    <div key={event.id} style={styles.card}>
-                        <h4>{event.name}</h4>
-                        <p><strong>Date:</strong> {event.date} at {event.time}</p>
-                        <p><strong>Venue:</strong> {event.venue}</p>
-                        <p><strong>Cost:</strong> ₹{event.cost}</p>
-                        <p>{event.description}</p>
-                    </div>
-                ))}
+            <div className="card-grid">
+                 {events.map(event => <EventCard key={event.id} event={event} />)}
             </div>
         </div>
     );
 };
 
-const StudentDashboard = ({ studentId }) => {
-    const [events, setEvents] = useState([]);
-    const [registrations, setRegistrations] = useState([]);
-    const [myEvents, setMyEvents] = useState(new Set());
+const StudentDashboard = ({ studentId }: { studentId: number }) => {
+    // FIX: Type component state with AppEvent and AppRegistration.
+    const [events, setEvents] = useState<AppEvent[]>([]);
+    const [registrations, setRegistrations] = useState<AppRegistration[]>([]);
+    const [myEvents, setMyEvents] = useState(new Set<number>());
+    const [isLoading, setIsLoading] = useState(false);
 
     const fetchData = async () => {
         try {
+            // FIX: Specify expected return types to fix errors on lines 223 and 224.
             const [eventsData, regsData] = await Promise.all([
-                apiFetch('/events'),
-                apiFetch('/registrations')
+                apiFetch<AppEvent[]>('/events'),
+                apiFetch<AppRegistration[]>('/registrations')
             ]);
             setEvents(eventsData);
+            // FIX: regsData is now correctly typed as an array, so .filter can be used.
             const studentRegs = regsData.filter(r => r.studentId === studentId);
             setRegistrations(studentRegs);
             setMyEvents(new Set(studentRegs.map(r => r.eventId)));
@@ -123,7 +280,8 @@ const StudentDashboard = ({ studentId }) => {
         fetchData();
     }, [studentId]);
 
-    const handleRegister = async (eventId) => {
+    const handleRegister = async (eventId: number) => {
+        setIsLoading(true);
         try {
             await apiFetch('/registrations', {
                 method: 'POST',
@@ -131,48 +289,50 @@ const StudentDashboard = ({ studentId }) => {
             });
             alert('Registration successful! Awaiting verification.');
             fetchData(); // Refresh data
-        } catch (error) {
+        } catch (error: any) {
             alert(`Registration failed: ${error.message}`);
+        } finally {
+            setIsLoading(false);
         }
     };
     
-    const getEventName = (eventId) => events.find(e => e.id === eventId)?.name || 'Unknown Event';
+    const getEventName = (eventId: number) => {
+        const event = events.find(e => e.id === eventId);
+        return event ? event.name : 'Unknown Event';
+    };
 
     return (
         <div>
             <h3>My Registrations</h3>
             {registrations.length > 0 ? (
-                 <table style={styles.table}>
+                 <table>
                      <thead>
                          <tr>
-                             <th style={styles.th}>Event</th>
-                             <th style={styles.th}>Status</th>
+                             <th>Event</th>
+                             <th>Status</th>
                          </tr>
                      </thead>
                      <tbody>
                          {registrations.map(reg => (
                              <tr key={reg.id}>
-                                 <td style={styles.td}>{getEventName(reg.eventId)}</td>
-                                 <td style={styles.td}>{reg.status}</td>
+                                 <td>{getEventName(reg.eventId)}</td>
+                                 <td>{reg.status}</td>
                              </tr>
                          ))}
                      </tbody>
                  </table>
             ) : <p>You have not registered for any events yet.</p>}
            
-            <h3 style={{marginTop: '40px'}}>Available Events</h3>
-             <div style={styles.cardContainer}>
+            <h3>Available Events</h3>
+             <div className="card-grid">
                  {events.map(event => (
-                    <div key={event.id} style={styles.card}>
-                        <h4>{event.name}</h4>
-                        <p><strong>Date:</strong> {event.date} at {event.time}</p>
-                        <p><strong>Venue:</strong> {event.venue}</p>
-                        <p><strong>Cost:</strong> ₹{event.cost}</p>
-                        <p>{event.description}</p>
+                    <EventCard key={event.id} event={event}>
                         {!myEvents.has(event.id) && (
-                            <button onClick={() => handleRegister(event.id)} style={styles.button}>Register</button>
+                            <button onClick={() => handleRegister(event.id)} className="btn btn-success" disabled={isLoading}>
+                                Register
+                            </button>
                         )}
-                    </div>
+                    </EventCard>
                 ))}
             </div>
         </div>
@@ -181,18 +341,21 @@ const StudentDashboard = ({ studentId }) => {
 
 
 const AdminDashboard = () => {
-    const [events, setEvents] = useState([]);
-    const [registrations, setRegistrations] = useState([]);
-    const [students, setStudents] = useState([]);
+    // FIX: Type component state with AppEvent and AppRegistration.
+    const [events, setEvents] = useState<AppEvent[]>([]);
+    const [registrations, setRegistrations] = useState<AppRegistration[]>([]);
+    const [students, setStudents] = useState<Omit<User, 'password'>[]>([]);
     const [view, setView] = useState('events'); // 'events', 'registrations'
     const [newEvent, setNewEvent] = useState({ name: '', date: '', time: '', venue: '', cost: '', description: '' });
+    const [isGenerating, setIsGenerating] = useState(false);
 
     const fetchData = async () => {
         try {
+            // FIX: Specify expected return types to fix errors.
             const [eventsData, regsData, studentsData] = await Promise.all([
-                apiFetch('/events'),
-                apiFetch('/registrations'),
-                apiFetch('/users/students')
+                apiFetch<AppEvent[]>('/events'),
+                apiFetch<AppRegistration[]>('/registrations'),
+                apiFetch<Omit<User, 'password'>[]>('/users/students')
             ]);
             setEvents(eventsData);
             setRegistrations(regsData);
@@ -206,123 +369,177 @@ const AdminDashboard = () => {
         fetchData();
     }, []);
 
-    const handleInputChange = (e) => {
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
-        setNewEvent(prev => ({ ...prev, [name]: value }));
+        setNewEvent(prev => Object.assign({}, prev, { [name]: value }));
     };
 
-    const handleAddEvent = async (e) => {
+    const handleGenerateDescription = async () => {
+        if (!newEvent.name) {
+            alert('Please enter an event title first.');
+            return;
+        }
+        setIsGenerating(true);
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            // FIX: Use a current, recommended model and correct prompt/response handling.
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: `Write a compelling one-paragraph event description for an event titled "${newEvent.name}". Make it exciting and professional for a college audience.`,
+            });
+            const text = response.text;
+            setNewEvent(prev => Object.assign({}, prev, { description: text }));
+        } catch (error) {
+            console.error("AI Generation failed:", error);
+            alert('Failed to generate description. Please try again.');
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
+    const handleAddEvent = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
+            // FIX: Replace spread syntax with Object.assign to resolve SyntaxError.
+            const eventPayload = Object.assign({}, newEvent, { cost: parseInt(newEvent.cost, 10) || 0 });
             await apiFetch('/events', {
                 method: 'POST',
-                body: JSON.stringify({ ...newEvent, cost: parseInt(newEvent.cost, 10) })
+                body: JSON.stringify(eventPayload)
             });
+            alert('Event added successfully!');
             setNewEvent({ name: '', date: '', time: '', venue: '', cost: '', description: '' });
             fetchData();
-        } catch (error) {
+        } catch (error: any) {
             alert(`Failed to add event: ${error.message}`);
         }
     };
 
-    const handleDeleteEvent = async (eventId) => {
-        if (window.confirm('Are you sure you want to delete this event? This will also remove all registrations for it.')) {
-            try {
-                await apiFetch(`/events/${eventId}`, { method: 'DELETE' });
-                fetchData();
-            } catch (error) {
-                alert(`Failed to delete event: ${error.message}`);
-            }
+    const handleDeleteEvent = (eventId: number) => {
+        if (window.confirm('Are you sure you want to delete this event? This action cannot be undone.')) {
+            apiFetch(`/events/${eventId}`, { method: 'DELETE' })
+                .then(() => {
+                    alert('Event deleted successfully.');
+                    // Update state directly after successful API call
+                    setEvents(prevEvents => prevEvents.filter(event => event.id !== eventId));
+                    setRegistrations(prevRegistrations => prevRegistrations.filter(reg => reg.eventId !== eventId));
+                })
+                .catch((error: any) => {
+                    alert(`Failed to delete event: ${error.message}`);
+                });
         }
     };
 
-    const handleVerify = async (regId) => {
+    const handleVerifyRegistration = async (regId: number) => {
         try {
             await apiFetch(`/registrations/${regId}/verify`, { method: 'PATCH' });
+            alert('Registration verified!');
             fetchData();
-        } catch (error) {
+        } catch (error: any) {
             alert(`Failed to verify registration: ${error.message}`);
         }
     };
-    
-    const getStudentName = (studentId) => students.find(s => s.id === studentId)?.name || 'Unknown';
-    const getEventName = (eventId) => events.find(e => e.id === eventId)?.name || 'Unknown';
+
+    const getStudentName = (studentId: number) => {
+        const student = students.find(s => s.id === studentId);
+        return student ? student.name : 'Unknown Student';
+    };
+
+    const getEventName = (eventId: number) => {
+        const event = events.find(e => e.id === eventId);
+        return event ? event.name : 'Unknown Event';
+    };
 
     return (
         <div>
-            <nav style={styles.adminNav}>
-                <button onClick={() => setView('events')} style={view === 'events' ? styles.adminNavButtonActive : styles.adminNavButton}>Manage Events</button>
-                <button onClick={() => setView('registrations')} style={view === 'registrations' ? styles.adminNavButtonActive : styles.adminNavButton}>Manage Registrations</button>
-            </nav>
+            <div className="tabs">
+                <button onClick={() => setView('events')} className={view === 'events' ? 'active' : ''}>Manage Events</button>
+                <button onClick={() => setView('registrations')} className={view === 'registrations' ? 'active' : ''}>Manage Registrations</button>
+            </div>
 
             {view === 'events' && (
                 <div>
                     <h3>Add New Event</h3>
-                    <form onSubmit={handleAddEvent} style={styles.formGrid}>
-                         <input name="name" value={newEvent.name} onChange={handleInputChange} placeholder="Event Name" required style={styles.input} />
-                         <input name="date" type="date" value={newEvent.date} onChange={handleInputChange} placeholder="Date" required style={styles.input} />
-                         <input name="time" type="time" value={newEvent.time} onChange={handleInputChange} placeholder="Time" required style={styles.input} />
-                         <input name="venue" value={newEvent.venue} onChange={handleInputChange} placeholder="Venue" required style={styles.input} />
-                         <input name="cost" type="number" value={newEvent.cost} onChange={handleInputChange} placeholder="Cost (INR)" required style={styles.input} />
-                         <textarea name="description" value={newEvent.description} onChange={handleInputChange} placeholder="Description" required style={{...styles.input, gridColumn: '1 / -1'}} />
-                         <button type="submit" style={{...styles.button, gridColumn: '1 / -1'}}>Add Event</button>
+                    <form onSubmit={handleAddEvent}>
+                        <div className="form-grid">
+                            <div className="form-group">
+                                <label htmlFor="name">Event Name</label>
+                                <input type="text" id="name" name="name" value={newEvent.name} onChange={handleInputChange} required />
+                            </div>
+                            <div className="form-group">
+                                <label htmlFor="date">Date</label>
+                                <input type="date" id="date" name="date" value={newEvent.date} onChange={handleInputChange} required />
+                            </div>
+                            <div className="form-group">
+                                <label htmlFor="time">Time</label>
+                                <input type="time" id="time" name="time" value={newEvent.time} onChange={handleInputChange} required />
+                            </div>
+                             <div className="form-group">
+                                <label htmlFor="venue">Venue</label>
+                                <input type="text" id="venue" name="venue" value={newEvent.venue} onChange={handleInputChange} required />
+                            </div>
+                             <div className="form-group">
+                                <label htmlFor="cost">Cost (₹)</label>
+                                <input type="number" id="cost" name="cost" value={newEvent.cost} onChange={handleInputChange} required />
+                            </div>
+                            <div className="form-group full-width">
+                                <div className="form-label-group">
+                                    <label htmlFor="description">Description</label>
+                                    <button type="button" onClick={handleGenerateDescription} className="btn btn-secondary btn-small" disabled={isGenerating}>
+                                        {isGenerating ? 'Generating...' : '✨ Generate with AI'}
+                                    </button>
+                                </div>
+                                <textarea id="description" name="description" value={newEvent.description} onChange={handleInputChange} required />
+                            </div>
+                        </div>
+                        <button type="submit" className="btn" style={{ marginTop: '1.5rem' }}>Add Event</button>
                     </form>
                     
-                    <h3 style={{marginTop: '40px'}}>Existing Events</h3>
-                     <table style={styles.table}>
-                         <thead>
-                             <tr>
-                                 <th style={styles.th}>Name</th>
-                                 <th style={styles.th}>Date</th>
-                                 <th style={styles.th}>Venue</th>
-                                 <th style={styles.th}>Cost</th>
-                                 <th style={styles.th}>Actions</th>
-                             </tr>
-                         </thead>
-                         <tbody>
-                             {events.map(event => (
-                                 <tr key={event.id}>
-                                     <td style={styles.td}>{event.name}</td>
-                                     <td style={styles.td}>{event.date} at {event.time}</td>
-                                     <td style={styles.td}>{event.venue}</td>
-                                     <td style={styles.td}>₹{event.cost}</td>
-                                     <td style={styles.td}>
-                                         <button onClick={() => handleDeleteEvent(event.id)} style={styles.buttonDanger}>Delete</button>
-                                     </td>
-                                 </tr>
-                             ))}
-                         </tbody>
-                     </table>
+                    <h3>Current Events</h3>
+                    <div className="card-grid">
+                        {events.map(event => (
+                            <EventCard key={event.id} event={event}>
+                                <button onClick={() => handleDeleteEvent(event.id)} className="btn btn-danger">Delete</button>
+                            </EventCard>
+                        ))}
+                    </div>
                 </div>
             )}
-            
+
             {view === 'registrations' && (
                 <div>
-                    <h3>All Registrations</h3>
-                     <table style={styles.table}>
-                         <thead>
-                             <tr>
-                                 <th style={styles.th}>Event</th>
-                                 <th style={styles.th}>Student</th>
-                                 <th style={styles.th}>Status</th>
-                                 <th style={styles.th}>Action</th>
-                             </tr>
-                         </thead>
-                         <tbody>
-                             {registrations.map(reg => (
-                                 <tr key={reg.id}>
-                                     <td style={styles.td}>{getEventName(reg.eventId)}</td>
-                                     <td style={styles.td}>{getStudentName(reg.studentId)}</td>
-                                     <td style={styles.td}>{reg.status}</td>
-                                     <td style={styles.td}>
-                                         {reg.status === 'Pending' && (
-                                             <button onClick={() => handleVerify(reg.id)} style={styles.button}>Verify</button>
-                                         )}
-                                     </td>
-                                 </tr>
-                             ))}
-                         </tbody>
-                     </table>
+                    <h3>Manage Registrations</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>Event</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {registrations
+                                .sort((a, b) => a.status === 'Pending' ? -1 : 1) // Show pending first
+                                .map(reg => (
+                                <tr key={reg.id}>
+                                    <td>{getStudentName(reg.studentId)}</td>
+                                    <td>{getEventName(reg.eventId)}</td>
+                                    <td>
+                                        <span className={`status-badge status-${reg.status.toLowerCase()}`}>
+                                            {reg.status}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {reg.status === 'Pending' ? (
+                                            <button onClick={() => handleVerifyRegistration(reg.id)} className="btn btn-success">Verify</button>
+                                        ) : (
+                                            <span className="action-verified">Verified</span>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             )}
         </div>
@@ -331,27 +548,24 @@ const AdminDashboard = () => {
 
 
 const App = () => {
-    const [user, setUser] = useState(null);
-
-    const handleLogin = (loggedInUser) => {
-        setUser(loggedInUser);
-    };
+    // FIX: Type the user state.
+    const [user, setUser] = useState<User | null>(null);
 
     const handleLogout = () => {
         setUser(null);
     };
 
     if (!user) {
-        return <LoginPage onLogin={handleLogin} />;
+        return <LoginPage onLogin={setUser} />;
     }
 
     return (
-        <div style={styles.container}>
-            <header style={styles.header}>
-                <h1>College Event Portal</h1>
-                <div>
-                    <span>Welcome, <strong>{user.name}</strong> ({user.role})</span>
-                    <button onClick={handleLogout} style={styles.logoutButton}>Logout</button>
+        <div className="container">
+            <header className="dashboard-header">
+                <h1>Welcome, {user.name}</h1>
+                <div className="user-info">
+                    <span style={{ background: '#e0e0e0', padding: '0.5rem 1rem', borderRadius: '20px', fontWeight: 600 }}>{user.role}</span>
+                    <button onClick={handleLogout} className="btn btn-danger">Logout</button>
                 </div>
             </header>
             <main>
@@ -363,30 +577,5 @@ const App = () => {
     );
 };
 
-// --- Styles ---
-// FIX: Explicitly type the styles object to satisfy TypeScript's CSSProperties type checking.
-const styles: { [key: string]: React.CSSProperties } = {
-    container: { fontFamily: 'sans-serif', maxWidth: '1200px', margin: '0 auto', padding: '20px' },
-    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #eee', paddingBottom: '10px', marginBottom: '20px' },
-    logoutButton: { marginLeft: '15px', background: '#f44336', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '4px', cursor: 'pointer' },
-    loginContainer: { maxWidth: '400px', margin: '50px auto', padding: '20px', boxShadow: '0 0 10px rgba(0,0,0,0.1)', borderRadius: '8px' },
-    form: { display: 'flex', flexDirection: 'column', gap: '10px' },
-    formGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '20px' },
-    input: { padding: '10px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '1rem' },
-    button: { padding: '10px 15px', border: 'none', background: '#007BFF', color: 'white', borderRadius: '4px', cursor: 'pointer', fontSize: '1rem' },
-    buttonDanger: { padding: '5px 10px', border: 'none', background: '#dc3545', color: 'white', borderRadius: '4px', cursor: 'pointer' },
-    error: { color: 'red', marginTop: '10px', background: '#ffebee', border: '1px solid #e57373', padding: '10px', borderRadius: '4px' },
-    table: { width: '100%', borderCollapse: 'collapse', marginTop: '20px' },
-    th: { background: '#f2f2f2', padding: '12px', border: '1px solid #ddd', textAlign: 'left' },
-    td: { padding: '12px', border: '1px solid #ddd' },
-    cardContainer: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' },
-    card: { border: '1px solid #ddd', padding: '15px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' },
-    adminNav: { marginBottom: '20px', borderBottom: '1px solid #ccc', paddingBottom: '10px' },
-    adminNavButton: { marginRight: '10px', background: 'none', border: '1px solid #ccc', padding: '8px 12px', borderRadius: '4px', cursor: 'pointer' },
-    adminNavButtonActive: { marginRight: '10px', background: '#007BFF', color: 'white', border: '1px solid #007BFF', padding: '8px 12px', borderRadius: '4px', cursor: 'pointer' }
-};
-
-
-// --- Render App ---
-const root = ReactDOM.createRoot(document.getElementById('root'));
+const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
 root.render(<App />);

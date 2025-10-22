@@ -1,13 +1,5 @@
 {
-  "name": "college-event-backend",
+  "name": "obsolete-backend-config",
   "version": "1.0.0",
-  "description": "Backend for the College Event Management System",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js"
-  },
-  "dependencies": {
-    "cors": "^2.8.5",
-    "express": "^4.17.1"
-  }
+  "description": "This file is no longer in use as the application is now fully client-side."
 }
