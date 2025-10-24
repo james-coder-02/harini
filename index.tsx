@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { GoogleGenAI } from "@google/genai";
@@ -211,7 +212,8 @@ const LoginPage = ({ onLogin }: { onLogin: (user: User) => void }) => {
 
 // FIX: Set a default value for children to make it an optional prop and type props.
 // FIX: Updated to use AppEvent type.
-const EventCard = ({ event, children = null }: { event: AppEvent, children?: React.ReactNode }) => (
+// FIX: Explicitly type EventCard as a React.FC to ensure TypeScript correctly handles the special `key` prop used in list rendering.
+const EventCard: React.FC<{ event: AppEvent, children?: React.ReactNode }> = ({ event, children = null }) => (
      <div className="card">
         <h4>{event.name}</h4>
         <div className="card-details">
@@ -228,6 +230,7 @@ const EventCard = ({ event, children = null }: { event: AppEvent, children?: Rea
 const FacultyDashboard = () => {
     // FIX: Type the events state and use AppEvent.
     const [events, setEvents] = useState<AppEvent[]>([]);
+    const [searchQuery, setSearchQuery] = useState('');
 
     useEffect(() => {
         const fetchEvents = async () => {
@@ -242,12 +245,31 @@ const FacultyDashboard = () => {
         fetchEvents();
     }, []);
 
+    const filteredEvents = events.filter(event =>
+        event.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        event.venue.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        event.description.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
     return (
         <div>
             <h3>Upcoming Events</h3>
-            <div className="card-grid">
-                 {events.map(event => <EventCard key={event.id} event={event} />)}
+             <div className="search-container">
+                <input
+                    type="text"
+                    placeholder="Search events by name, venue, or description..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="search-input"
+                />
             </div>
+            {filteredEvents.length > 0 ? (
+                <div className="card-grid">
+                    {filteredEvents.map(event => <EventCard key={event.id} event={event} />)}
+                </div>
+            ) : (
+                <p>No events found matching your search.</p>
+            )}
         </div>
     );
 };
@@ -258,6 +280,7 @@ const StudentDashboard = ({ studentId }: { studentId: number }) => {
     const [registrations, setRegistrations] = useState<AppRegistration[]>([]);
     const [myEvents, setMyEvents] = useState(new Set<number>());
     const [isLoading, setIsLoading] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
 
     const fetchData = async () => {
         try {
@@ -301,6 +324,12 @@ const StudentDashboard = ({ studentId }: { studentId: number }) => {
         return event ? event.name : 'Unknown Event';
     };
 
+    const filteredEvents = events.filter(event =>
+        event.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        event.venue.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        event.description.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
     return (
         <div>
             <h3>My Registrations</h3>
@@ -324,17 +353,30 @@ const StudentDashboard = ({ studentId }: { studentId: number }) => {
             ) : <p>You have not registered for any events yet.</p>}
            
             <h3>Available Events</h3>
-             <div className="card-grid">
-                 {events.map(event => (
-                    <EventCard key={event.id} event={event}>
-                        {!myEvents.has(event.id) && (
-                            <button onClick={() => handleRegister(event.id)} className="btn btn-success" disabled={isLoading}>
-                                Register
-                            </button>
-                        )}
-                    </EventCard>
-                ))}
+            <div className="search-container">
+                <input
+                    type="text"
+                    placeholder="Search available events..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="search-input"
+                />
             </div>
+             {filteredEvents.length > 0 ? (
+                <div className="card-grid">
+                    {filteredEvents.map(event => (
+                        <EventCard key={event.id} event={event}>
+                            {!myEvents.has(event.id) && (
+                                <button onClick={() => handleRegister(event.id)} className="btn btn-success" disabled={isLoading}>
+                                    Register
+                                </button>
+                            )}
+                        </EventCard>
+                    ))}
+                </div>
+            ) : (
+                <p>No events found matching your search.</p>
+            )}
         </div>
     );
 };
@@ -348,6 +390,7 @@ const AdminDashboard = () => {
     const [view, setView] = useState('events'); // 'events', 'registrations'
     const [newEvent, setNewEvent] = useState({ name: '', date: '', time: '', venue: '', cost: '', description: '' });
     const [isGenerating, setIsGenerating] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
 
     const fetchData = async () => {
         try {
@@ -449,6 +492,12 @@ const AdminDashboard = () => {
         return event ? event.name : 'Unknown Event';
     };
 
+    const filteredEvents = events.filter(event =>
+        event.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        event.venue.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        event.description.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
     return (
         <div>
             <div className="tabs">
@@ -495,13 +544,26 @@ const AdminDashboard = () => {
                     </form>
                     
                     <h3>Current Events</h3>
-                    <div className="card-grid">
-                        {events.map(event => (
-                            <EventCard key={event.id} event={event}>
-                                <button onClick={() => handleDeleteEvent(event.id)} className="btn btn-danger">Delete</button>
-                            </EventCard>
-                        ))}
+                    <div className="search-container">
+                        <input
+                            type="text"
+                            placeholder="Search current events..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="search-input"
+                        />
                     </div>
+                     {filteredEvents.length > 0 ? (
+                        <div className="card-grid">
+                            {filteredEvents.map(event => (
+                                <EventCard key={event.id} event={event}>
+                                    <button onClick={() => handleDeleteEvent(event.id)} className="btn btn-danger">Delete</button>
+                                </EventCard>
+                            ))}
+                        </div>
+                    ) : (
+                        <p>No events found matching your search.</p>
+                    )}
                 </div>
             )}
 
